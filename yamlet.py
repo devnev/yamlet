@@ -372,5 +372,8 @@ def eval_expr(expr, document, scopes, transformed):
 
 
 if __name__ == "__main__":
-  result = execute(sys.argv[1])
-  print(result, end='')
+  import argparse
+  parser = argparse.ArgumentParser()
+  parser.add_argument("path", help="path to YAML template")
+  args = parser.parse_args()
+  print(execute(args.path), end='')
