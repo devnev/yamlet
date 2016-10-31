@@ -14,7 +14,7 @@ def execute(path, content=None):
       content = f.read()
   doc = parse(path, content, ParseContext())
   result = doc.execute()
-  return yaml.serialize(result)
+  return yaml.serialize(result, allow_unicode=True)
 
 
 def parse(path, content, ctx):

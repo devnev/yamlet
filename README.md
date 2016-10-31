@@ -24,7 +24,7 @@ result:
 output:
 ```
 $ yamlet.py thing.yaml
-the_usual: "plain strings \xE1 la YAML"
+the_usual: plain strings á la YAML
 some_func_calls: 6
 just_an_expr: 3
 not_an_expr: 1 + 2
