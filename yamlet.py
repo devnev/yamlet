@@ -48,7 +48,31 @@ class FloatScalar(yaml.ScalarNode):
     if isinstance(other, FloatScalar):
       return FloatScalar(self.float_value + other.float_value)
     return NotImplemented
+  def __sub__(self, other):
+    if isinstance(other, int):
+      return FloatScalar(self.float_value - other)
+    if isinstance(other, float):
+      return FloatScalar(self.float_value - other)
+    if isinstance(other, IntScalar):
+      return FloatScalar(self.float_value - other.int_value)
+    if isinstance(other, FloatScalar):
+      return FloatScalar(self.float_value - other.float_value)
+    return NotImplemented
+  def __mul__(self, other):
+    if isinstance(other, int):
+      return FloatScalar(self.float_value * other)
+    if isinstance(other, float):
+      return FloatScalar(self.float_value * other)
+    if isinstance(other, IntScalar):
+      return FloatScalar(self.float_value * other.int_value)
+    if isinstance(other, FloatScalar):
+      return FloatScalar(self.float_value * other.float_value)
+    return NotImplemented
   def __radd__(self, other):
+    return self.__add__(other)
+  def __rsub__(self, other):
+    return self.__add__(other)
+  def __rmul__(self, other):
     return self.__add__(other)
 
 
@@ -67,7 +91,31 @@ class IntScalar(yaml.ScalarNode):
     if isinstance(other, FloatScalar):
       return FloatScalar(self.int_value + other.float_value)
     return NotImplemented
+  def __sub__(self, other):
+    if isinstance(other, int):
+      return IntScalar(self.int_value - other)
+    if isinstance(other, float):
+      return FloatScalar(self.int_value - other)
+    if isinstance(other, IntScalar):
+      return IntScalar(self.int_value - other.int_value)
+    if isinstance(other, FloatScalar):
+      return FloatScalar(self.int_value - other.float_value)
+    return NotImplemented
+  def __mul__(self, other):
+    if isinstance(other, int):
+      return IntScalar(self.int_value * other)
+    if isinstance(other, float):
+      return FloatScalar(self.int_value * other)
+    if isinstance(other, IntScalar):
+      return IntScalar(self.int_value * other.int_value)
+    if isinstance(other, FloatScalar):
+      return FloatScalar(self.int_value * other.float_value)
+    return NotImplemented
   def __radd__(self, other):
+    return self.__add__(other)
+  def __rsub__(self, other):
+    return self.__add__(other)
+  def __rmul__(self, other):
     return self.__add__(other)
 
 
