@@ -119,7 +119,7 @@ def parse(path, content, ctx):
     if not isinstance(k, yaml.ScalarNode):
       raise Exception("root of {} has non-scalar key {}".format(path, k))
 
-  keys = set(v[0].value for v in root.value)
+  keys = set(k.value for k, _ in root.value)
   unknown_keys = keys - set(['imports', 'locals', 'exports', 'result'])
   if unknown_keys:
     raise Exception("unknown keys {} in template {}".format(unknown_keys, path))
@@ -205,10 +205,45 @@ class Scopes(object):
     raise AttributeError("name {} not in scope".format(name))
 
 
+class Func(object):
+  def __init__(self, node, document, params, locals, parent_scope, result):
+    self.node = node
+    self.document = document
+    self.params = params
+    self.locals = locals
+    self.parent_scope = parent_scope
+    self.result = result
+  def call(self, transformed, *args):
+    if len(args) != len(self.params):
+      raise Exception("expected {} args in call to {}, got {}".format(
+        len(self.params), self.node, len(args)))
+    call_locals = dict(list(self.locals.items()) + list(zip(self.params, args)))
+    call_scope = Scopes(call_locals, self.parent_scope, None) 
+    return transform(self.result, self.document, call_scope, transformed)
+  def ref(self, transformed):
+    return FuncRef(self, transformed)
+
+
+class FuncRef(object):
+  def __init__(self, func, transformed):
+    self.func = func
+    self.transformed = transformed
+  def __call__(self, *args):
+    return self.func.call(self.transformed, *args)
+
+
 def transform(node, document, scopes, transformed):
   if (node, scopes) in transformed:
     return transformed[(node, scopes)]
   local_transform = lambda n: transform(n, document, scopes, transformed)
+
+  if node.tag == '!func':
+    return define_func(node, document, scopes, transformed)
+
+  if node.tag == '!expr':
+    if not isinstance(node, yaml.ScalarNode):
+      raise Exception("`!expr` node {} is not a scalar".format(node))
+    return eval_expr(node.value, document, scopes, transformed)
 
   if isinstance(node, yaml.SequenceNode):
     children = [local_transform(n) for n in node.value]
@@ -235,10 +270,47 @@ def transform(node, document, scopes, transformed):
     transformed[(node, scopes)] = tr
     return tr
 
-  if node.tag == '!expr':
-    return eval_expr(node.value, document, scopes, transformed)
-
   return node
+
+
+def define_func(node, document, scopes, transformed):
+  if not isinstance(node, yaml.MappingNode):
+    raise Exception("`!func` node {} is not a map".format(node))
+  for k, _ in node.value:
+    if not isinstance(k, yaml.ScalarNode):
+      raise Exception("func {} has non-scalar key {}".format(node, k))
+  keys = set(k.value for k, _ in node.value)
+  unknown_keys = keys - set(['params', 'locals', 'result'])
+  if unknown_keys:
+    raise Exception("unknown keys {} in func node".format(unknown_keys, path))
+  func_map = dict((k.value, v) for k, v in node.value)
+
+  if 'result' not in func_map:
+    raise Exception("func {} has no result".format(node))
+
+  if 'params' not in func_map:
+    func_map['params'] = yaml.SequenceNode(None, [])
+  elif not isinstance(func_map['params'], yaml.SequenceNode):
+    raise Exception("params {} of {} are not a list".format(func_map['params'], node))
+  for i, v in enumerate(func_map['params'].value):
+    if not isinstance(v, yaml.ScalarNode):
+      raise Exception("param {} at index {} of {} is not a scalar".format(v, i, node))
+  params = [v.value for v in func_map['params'].value]
+
+  if 'locals' not in func_map:
+    func_map['locals'] = yaml.MappingNode(None, [])
+  elif not isinstance(func_map['locals'], yaml.MappingNode):
+    raise Exception("{} of {} is not a map".format('locals', node))
+  for k, _ in func_map['locals'].value:
+    if not isinstance(k, yaml.ScalarNode):
+      raise Exception("locals of {} has non-scalar key {}".format(node, k))
+  locals = dict((k.value, v) for k, v in func_map['locals'].value)
+
+  multiple_definitions = set(params) & set(locals.keys())
+  if multiple_definitions:
+    raise Exception("multiple definitions for {} in {}".format(multiple_definitions, node))
+
+  return Func(node, document, params, locals, scopes, func_map['result'])
 
 
 def eval_expr(expr, document, scopes, transformed):
@@ -250,7 +322,9 @@ def eval_expr(expr, document, scopes, transformed):
       raise KeyError("%s not in %s" % (key, mapping))
 
   def wrap(node):
-    if isinstance(node, yaml.SequenceNode):
+    if isinstance(node, Func):
+      return node.ref(transformed)
+    elif isinstance(node, yaml.SequenceNode):
       return LazyMap(lambda k: wrap(node.value[k]), node)
     elif isinstance(node, yaml.MappingNode):
       return LazyObj(lambda k: wrap(lookup_mapping(node, k)), node)
@@ -260,9 +334,10 @@ def eval_expr(expr, document, scopes, transformed):
   def unwrap(node):
     if isinstance(node, LazyObj) and node._o:
       return node._o
-    if isinstance(node, LazyMap) and node._m:
+    elif isinstance(node, LazyMap) and node._m:
       return node._m
-    return node
+    else:
+      return node
 
   def lookup_import(import_name, name):
     return wrap(document.imports[import_name].load_export(name, transformed))

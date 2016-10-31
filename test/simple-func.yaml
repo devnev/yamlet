@@ -1,0 +1,5 @@
+locals:
+  f: !func
+    result: 1
+result:
+  foo: (f())
