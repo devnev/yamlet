@@ -1,0 +1,9 @@
+locals:
+  f: !func
+    params:
+    - x
+    - y
+    result: (x + y)
+  g: (f)
+result:
+  val: (g(1, 2))

@@ -5,6 +5,7 @@ import itertools
 import yaml
 import re
 import os.path
+import sys
 
 
 def execute(path, content=None):
@@ -236,7 +237,7 @@ class FuncRef(object):
 def convert(value):
   if isinstance(value, yaml.Node):
     return value
-  if isinstance(value, Func):
+  if isinstance(value, FuncRef):
     return value
   if isinstance(value, int):
     return IntScalar(value)
@@ -248,6 +249,8 @@ def convert(value):
 
 
 def transform(node, document, scopes, transformed):
+  #print("transforming", repr(node), file=sys.stderr)
+
   if (node, scopes) in transformed:
     return transformed[(node, scopes)]
   local_transform = lambda n: transform(n, document, scopes, transformed)
@@ -329,6 +332,7 @@ def define_func(node, document, scopes, transformed):
 
 
 def eval_expr(expr, document, scopes, transformed):
+  #print("evaluating", repr(expr), file=sys.stderr)
 
   def lookup_mapping(mapping, key):
     try:
@@ -368,6 +372,5 @@ def eval_expr(expr, document, scopes, transformed):
 
 
 if __name__ == "__main__":
-  import sys
   result = execute(sys.argv[1])
   print(result, end='')
