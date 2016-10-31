@@ -1,0 +1,10 @@
+locals:
+  a:
+    b:
+      c: 1
+  d:
+    - - 1
+      - 2
+result:
+  map: (a.b.c)
+  seq: (d[0][1])

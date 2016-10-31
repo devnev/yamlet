@@ -1,0 +1,5 @@
+locals:
+  baz:
+  - 3
+exports:
+  bar: (baz)

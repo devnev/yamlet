@@ -1,0 +1,7 @@
+- a
+- thing
+- with: 1
+  some: 2
+- complex: !kind
+    of: 3
+    result: 4

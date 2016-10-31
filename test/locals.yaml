@@ -1,0 +1,4 @@
+locals:
+  foo: 1
+  bar: 2
+result: (foo + bar)

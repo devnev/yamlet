@@ -1,0 +1,3 @@
+imports:
+  foo: import-target.yaml
+result: (foo.bar)
