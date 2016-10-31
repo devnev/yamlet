@@ -24,52 +24,29 @@ def parse(path, content, ctx):
     root = loader.get_single_node()
   finally:
     loader.dispose()
-  if not isinstance(root, yaml.MappingNode):
-    raise Exception("root of {} is not a map".format(path))
 
-  for k, _ in root.value:
-    if not isinstance(k, yaml.ScalarNode):
-      raise Exception("root of {} has non-scalar key {}".format(path, k))
-
-  keys = set(k.value for k, _ in root.value)
-  unknown_keys = keys - set(['imports', 'locals', 'exports', 'result'])
-  if unknown_keys:
-    raise Exception("unknown keys {} in template {}".format(unknown_keys, path))
-
-  root_map = dict((k.value, v) for k, v in root.value)
+  root_map = props("root of {}".format(path), root, ['imports', 'locals', 'exports', 'result'])
   for name in ['imports', 'locals', 'exports']:
-    if name not in root_map:
-      root_map[name] = yaml.MappingNode(None, [])
-    elif not isinstance(root_map[name], yaml.MappingNode):
-      raise Exception("{} of {} is not a map".format(name, path))
-    for k, _ in root_map[name].value:
-      if not isinstance(k, yaml.ScalarNode):
-        raise Exception("{} of {} has non-scalar key {}".format(name, path, k))
+    root_map[name] = props("{} of {}".format(name, path), root_map.get(name), None)
 
   multiple_definitions = set()
   for n1, n2 in itertools.combinations(['imports', 'locals', 'exports'], 2):
-    n1_names = set(k for k, v in root_map[n1].value)
-    n2_names = set(k for k, v in root_map[n2].value)
+    n1_names = set(k for k, v in root_map[n1].items())
+    n2_names = set(k for k, v in root_map[n2].items())
     multiple_definitions |= n1_names & n2_names
   if multiple_definitions:
     raise Exception("multiple top-level definitions for {} in {}".format(multiple_definitions, path))
 
   imports = {}
   if 'imports' in root_map:
-    for imp_name, imp_relpath in root_map['imports'].value:
-      if not isinstance(imp_name, yaml.ScalarNode):
-        raise Exception("import name not a scalar")
-      if not isinstance(imp_relpath, yaml.ScalarNode):
-        raise Exception("import path not a scalar")
-      imp_name = imp_name.value
-      imp_relpath = imp_relpath.value
-      imp_path = os.path.join(os.path.dirname(path), imp_relpath)
+    for imp_name, imp_relpath in root_map['imports'].items():
+      if not is_str_scalar(imp_relpath):
+        raise Exception("import path for {} not a str".format(imp_name))
+      imp_path = os.path.join(os.path.dirname(path), imp_relpath.value)
       imports[imp_name] = ctx.load(imp_path)
 
-  internal = dict(
-      [(k.value, v) for k, v in root_map['locals'].value] +
-      [(k.value, v) for k, v in root_map['exports'].value])
-  exports = dict((k.value, v) for k, v in root_map['exports'].value)
+  internal = dict(list(root_map['locals'].items()) + list(root_map['exports'].items()))
+  exports = dict(root_map['exports'])
 
   internal_scope = Scopes(internal, parent=None, internal=None)
   exports_scope = Scopes(exports, parent=None, internal=internal_scope)
@@ -127,37 +104,12 @@ def transform(node, document, scopes, transformed):
 
 
 def define_func(node, document, scopes, transformed):
-  if not isinstance(node, yaml.MappingNode):
-    raise Exception("`!func` node {} is not a map".format(node))
-  for k, _ in node.value:
-    if not isinstance(k, yaml.ScalarNode):
-      raise Exception("func {} has non-scalar key {}".format(node, k))
-  keys = set(k.value for k, _ in node.value)
-  unknown_keys = keys - set(['params', 'locals', 'result'])
-  if unknown_keys:
-    raise Exception("unknown keys {} in func node".format(unknown_keys, path))
-  func_map = dict((k.value, v) for k, v in node.value)
-
+  func_map = props("func {}".format(node), node, ['params', 'locals', 'result'], False)
   if 'result' not in func_map:
     raise Exception("func {} has no result".format(node))
 
-  if 'params' not in func_map:
-    func_map['params'] = yaml.SequenceNode(None, [])
-  elif not isinstance(func_map['params'], yaml.SequenceNode):
-    raise Exception("params {} of {} are not a list".format(func_map['params'], node))
-  for i, v in enumerate(func_map['params'].value):
-    if not isinstance(v, yaml.ScalarNode):
-      raise Exception("param {} at index {} of {} is not a scalar".format(v, i, node))
-  params = [v.value for v in func_map['params'].value]
-
-  if 'locals' not in func_map:
-    func_map['locals'] = yaml.MappingNode(None, [])
-  elif not isinstance(func_map['locals'], yaml.MappingNode):
-    raise Exception("{} of {} is not a map".format('locals', node))
-  for k, _ in func_map['locals'].value:
-    if not isinstance(k, yaml.ScalarNode):
-      raise Exception("locals of {} has non-scalar key {}".format(node, k))
-  locals = dict((k.value, v) for k, v in func_map['locals'].value)
+  params = names("params of {}".format(node), func_map.get('params'))
+  locals = props("locals of {}".format(node), func_map.get('locals'), None)
 
   multiple_definitions = set(params) & set(locals.keys())
   if multiple_definitions:
@@ -218,6 +170,39 @@ def convert(value):
   if isinstance(value, str):
     return yaml.ScalarNode('tag:yaml.org,2002:str', value)
   raise ValueError("cannot transform {} to node".format(value))
+
+
+def props(name, node, keys, check_tag=True):
+  if not node:
+    return dict()
+  if not isinstance(node, yaml.MappingNode):
+    raise Exception("node {} is not a map".format(node))
+  if check_tag and node.tag != 'tag:yaml.org,2002:map':
+    raise Exception("node {} is not a map".format(node))
+  for k, _ in node.value:
+    if not is_str_scalar(k):
+      raise Exception("{} has non-string key {}".format(name, k))
+  if keys:
+    found = set(k.value for k, _ in node.value)
+    unknown = found - set(keys)
+    if unknown:
+      raise Exception("unknown keys {} in {}".format(unknown, name))
+  return dict((k.value, v) for k, v in node.value)
+
+
+def names(name, node):
+  if not node:
+    return []
+  if not isinstance(node, yaml.SequenceNode) or node.tag != 'tag:yaml.org,2002:seq':
+    raise Exception("{} is not a list".format(name))
+  for i, v in enumerate(node.value):
+    if not is_str_scalar(v):
+      raise Exception("param {} at index {} of {} is not a scalar".format(v, i, node))
+  return [v.value for v in node.value]
+
+
+def is_str_scalar(node):
+  return isinstance(node, yaml.ScalarNode) and node.tag == 'tag:yaml.org,2002:str'
 
 
 class LazyMap(object):
