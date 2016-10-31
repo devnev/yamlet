@@ -1,0 +1,10 @@
+locals:
+  f: !func
+    params:
+    - x
+    - y
+    result: (x + y)
+  z: 3
+result:
+  val: (f(1, 2))
+  val2: (f(z, 1))

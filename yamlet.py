@@ -229,7 +229,22 @@ class FuncRef(object):
     self.func = func
     self.transformed = transformed
   def __call__(self, *args):
+    args = [convert(arg) for arg in args]
     return self.func.call(self.transformed, *args)
+
+
+def convert(value):
+  if isinstance(value, yaml.Node):
+    return value
+  if isinstance(value, Func):
+    return value
+  if isinstance(value, int):
+    return IntScalar(value)
+  if isinstance(value, float):
+    return FloatScalar(value)
+  if isinstance(value, str):
+    return yaml.ScalarNode('tag:yaml.org,2002:str', value)
+  raise ValueError("cannot transform {} to node".format(value))
 
 
 def transform(node, document, scopes, transformed):
@@ -349,18 +364,7 @@ def eval_expr(expr, document, scopes, transformed):
       return LazyObj(lambda name2: lookup_import(name, name2))
     raise AttributeError("name {} not in scope".format(name))
 
-  result = unwrap(eval(expr, {'__builtins__':None}, LazyMap(lookup)))
-
-  if isinstance(result, yaml.Node):
-    return result
-  elif isinstance(result, int):
-    return IntScalar(result)
-  elif isinstance(result, float):
-    return FloatScalar(result)
-  elif isinstance(result, str):
-    return yaml.ScalarNode(None, result)
-  else:
-    raise ValueError("cannot transform {} to YAML node".format(result))
+  return convert(unwrap(eval(expr, {'__builtins__':None}, LazyMap(lookup))))
 
 
 if __name__ == "__main__":
